@@ -1,0 +1,92 @@
+# Opstree Redis Cluster example for OpenShift
+# Replace the placeholder values (API group, operator package name, channel, source, storageClass)
+# with the actual values from the Opstree operator you install from OperatorHub.
+
+---
+# Namespace for operator & CRs (creates if missing)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis
+
+---
+# OperatorGroup (required for OLM-managed operator installation)
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: redis-operatorgroup
+  namespace: redis
+spec:
+  targetNamespaces:
+  - redis
+
+---
+# Subscription to install the Opstree Redis operator via OLM
+# NOTE: replace OPSTREE_OPERATOR_PACKAGE, CHANNEL, and SOURCE with real values
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: opstree-redis-sub
+  namespace: redis
+spec:
+  channel: stable # adjust as needed
+  name: OPSTREE_OPERATOR_PACKAGE # e.g. opstree-redis-operator
+  source: OPERATOR_SOURCE # e.g. redhat-operators or community-operators
+  sourceNamespace: openshift-marketplace
+
+---
+---
+# Secret containing Redis authentication credentials.
+# Replace `REPLACE_WITH_BASE64_PASSWORD` with the base64-encoded password
+# (e.g. `echo -n "mypassword" | base64`). The operator's CRD may expect
+# different keys/format (username/password or ACL). Adjust the `secretKey`
+# referenced below to match the operator's CRD.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-auth
+  namespace: redis
+type: Opaque
+data:
+  password: REPLACE_WITH_BASE64_PASSWORD
+
+---
+# Example Custom Resource (CR) that requests a Redis cluster from the operator.
+# Replace `apiVersion` and `kind` with the exact values provided by the installed operator's CRD.
+apiVersion: OPSTREE_REDIS_API_GROUP/v1alpha1 # e.g. redis.opstree.com/v1alpha1
+kind: RedisCluster # confirm the CR kind from the operator's docs
+metadata:
+  name: example-redis-cluster
+  namespace: redis
+spec:
+  # Authentication configuration — adjust keys to the operator's CRD
+  auth:
+    enabled: true
+    secretName: redis-auth
+    secretKey: password
+
+  # number of Redis pods/replicas (master+replica configuration depends on operator)
+  replicas: 3
+  # resources for each Redis pod
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 2Gi
+      cpu: 1
+  # persistence settings (adjust storageClass/name as appropriate for OpenShift)
+  storage:
+    size: 5Gi
+    storageClassName: STORAGE_CLASS_NAME # replace with your OpenShift storage class
+  # Redis config (operator-specific keys — adapt as needed)
+  redisConfig:
+    maxmemory-policy: allkeys-lru
+  # enable or disable persistence if the operator supports it
+  persistence: true
+
+# --- end of manifest ---
+
+# Usage:
+# 1) Update placeholders in this file to match the Opstree operator package and CRD names.
+# 2) Apply with: oc apply -f redis-opstree-cluster.yaml (or kubectl apply -f ...).
